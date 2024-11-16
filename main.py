@@ -1,60 +1,117 @@
+# Flask imports
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+
+# Web scraping imports
+import requests
+import bs4
+
+# Ollama imports
+import ollama
+
+# Chroma imports
 import chromadb
 from chromadb.config import Settings
 import chromadb.utils.embedding_functions as embedding_functions
-import ollama
 
-chroma_client = chromadb.Client(Settings(anonymized_telemetry=False))
 
+# Set up the Flask app
+app = Flask(__name__)
+CORS(app)
+
+# Set up chromadb
+chroma_client = chromadb.Client()
 collection = chroma_client.create_collection(name="my_collection")
 
-# collection._embedding_function = embedding_functions.OllamaEmbeddingFunction(
-#     url="http://localhost:11434/api/embeddings",
-#     model_name="llama3.2",
-# )
 
-collection.add(
-    documents=[
-        "Brown University is located in Providence",
-        "Harvard is located in Boston",
-        "Rust is a systems programming language",
-        "f(x) = 2x + 3 is a cool math function",
-    ],
-    ids=["id1", "id2", "id3", "id4"],
-)
+def error_response(message: str, status_code: int):
+    """Return a JSON error response with a given message and HTTP status code."""
+    return jsonify({"error": message}), status_code
 
 
-question = "What is Rust programming language?"
+def get_text_from_url(url: str) -> str:
+    """
+    Get the text from a URL
+    """
+    response = requests.get(url)
+    soup = bs4.BeautifulSoup(response.text, "html.parser")
+    text = " ".join([p.text for p in soup.find_all("p")])
+
+    return text
 
 
-results = collection.query(
-    query_texts=[question],  # Chroma will embed this for you
-    n_results=4,  # how many results to return
-)
+@app.route("/documents", methods=["POST"])
+def add_documents():
+    """
+    Add a list of documents (represented as a list of URLs) to the vector database
+    """
+    urls = request.get_json()
+    if not urls:
+        return error_response("No data provided", 400)
+    if not isinstance(urls, list):
+        return error_response("Expected a list of URLs", 400)
 
-print(results)
+    # TASK 2: Extract the text from each URL
+    documents = []
 
-context = "\n".join(results["documents"][0])
+    ##
+    for url in urls:
+        text = get_text_from_url(url)
+        documents.append(text)
+    ##
+
+    # TASK 3: Add the documents to the vector database
+
+    ##
+    collection.add(
+        documents=documents,
+        ids=urls,
+    )
+    ##
+
+    return jsonify({"message": "Documents added successfully"}), 200
 
 
-PROMPT = f"""Answer the question based only on the following context:
-{context}
+@app.route("/query", methods=["GET"])
+def query_documents():
+    """
+    1. Use the vector database to find the most similar documents to a given query
+    2. Get the most similar documents from the database
+    3. Provide the query along with the most similar documents as context to the LLM
+    4. Return the response from the LLM
+    """
+    query = request.args.get("query")
+    if not query:
+        return error_response("No query provided", 400)
 
-Question: {question}
-"""
+    # TASK 4: Query the collection (the vector database) for the document most similar to the query
+    results = None
 
-print(PROMPT)
+    ##
+    results = collection.query(query_texts=[query], n_results=1)
+    ##
+
+    # TASK 5: Convert the results to a format that can be passed to the LLM as context
+    context = ""
+
+    ##
+    if results:
+        context = "\n".join(results["documents"][0])
+    ##
+
+    PROMPT = query
+    if context:
+        PROMPT = f"Given the following documents, generate a summary of the query:\n{context}\nQuery: {query}"
+
+    # TASK 1: Pass the PROMPT to the LLM and return the response
+    response = "PLACEHOLDER"
+
+    ##
+    response = ollama.generate(model="llama3.2", prompt=PROMPT)["response"]
+    ##
+
+    return jsonify({"response": response, "message": "Query successful"}), 200
 
 
-print(ollama.generate(model="llama3.2", prompt=PROMPT))
-
-#
-#
-# #
-# ollama_ef = embedding_functions.OllamaEmbeddingFunction(
-#     url="http://localhost:11434/api/embeddings",
-#     model_name="llama2",
-# )
-#
-# embeddings = ollama_ef(["This is my first text to embed", "This is my second document"])
-# #
-# print(embeddings)
+if __name__ == "__main__":
+    app.run(debug=True, port=5001)

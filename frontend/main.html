@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Document and Query Interface</title>
+    <!-- Include Tailwind CSS via CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen">
+    <div class="container mx-auto p-6 bg-white shadow-md rounded-lg">
+        <h1 class="text-2xl font-bold mb-6 text-center">Document Uploader and Query Interface</h1>
+
+        <!-- URL Submission Section -->
+        <div class="mb-8">
+            <h2 class="text-xl font-semibold mb-4">Upload Documents</h2>
+            <textarea id="url-input" class="w-full p-3 border rounded mb-4" rows="5" placeholder="Enter URLs, one per line"></textarea>
+            <button id="submit-urls" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">Submit URLs</button>
+            <p id="url-message" class="mt-4 text-green-600"></p>
+        </div>
+
+        <hr class="my-8">
+
+        <!-- Query Section -->
+        <div>
+            <h2 class="text-xl font-semibold mb-4">Query Documents</h2>
+            <input id="query-input" type="text" class="w-full p-3 border rounded mb-4" placeholder="Enter your query">
+            <button id="submit-query" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">Submit Query</button>
+            <div id="query-response" class="mt-6 p-4 bg-gray-100 rounded"></div>
+        </div>
+    </div>
+
+    <!-- JavaScript to handle form submissions -->
+    <script>
+        // Handle URL submission
+        document.getElementById('submit-urls').addEventListener('click', function() {
+            const urlInput = document.getElementById('url-input').value;
+            const urls = urlInput.split('\n').map(url => url.trim()).filter(url => url !== '');
+
+            fetch('http://localhost:5001/documents', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(urls),
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    document.getElementById('url-message').textContent = data.error;
+                    document.getElementById('url-message').classList.add('text-red-600');
+                } else {
+                    document.getElementById('url-message').textContent = data.message;
+                    document.getElementById('url-message').classList.remove('text-red-600');
+                    document.getElementById('url-message').classList.add('text-green-600');
+                    document.getElementById('url-input').value = '';
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('url-message').textContent = 'An error occurred while submitting URLs.';
+                document.getElementById('url-message').classList.add('text-red-600');
+            });
+        });
+
+        // Handle Query submission
+        document.getElementById('submit-query').addEventListener('click', function() {
+            const query = document.getElementById('query-input').value.trim();
+
+            if (!query) {
+                document.getElementById('query-response').textContent = 'Please enter a query.';
+                return;
+            }
+
+            fetch(`http://localhost:5001/query?query=${encodeURIComponent(query)}`,
+                {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    document.getElementById('query-response').textContent = data.error;
+                    document.getElementById('query-response').classList.add('text-red-600');
+                } else {
+                    document.getElementById('query-response').textContent = data.response;
+                    document.getElementById('query-response').classList.remove('text-red-600');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('query-response').textContent = 'An error occurred while processing the query.';
+                document.getElementById('query-response').classList.add('text-red-600');
+            });
+        });
+    </script>
+</body>
+</html>
