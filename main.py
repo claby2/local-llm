@@ -51,6 +51,11 @@ def add_documents():
     if not isinstance(urls, list):
         return error_response("Expected a list of URLs", 400)
 
+    all_docs = collection.get()
+    all_ids = all_docs["ids"]
+    if all_ids:
+        collection.delete(ids=all_ids)
+
     # TASK 2: Extract the text from each URL
     documents = []
 
